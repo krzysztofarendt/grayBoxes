@@ -344,7 +344,7 @@ class Minimum(Forward):
             elif self.optimizer.startswith('krz'):
                 #############################################
                 if HAS_KRZA_GA:
-                    validKeys = ['tol', 'options']       # see scipy's minimize
+                    validKeys = ['bounds', 'tol', 'args', 'options']  # see scipy's minimize
                     kw = {k: kwargs[k] for k in validKeys if k in kwargs}
                     res = krza_ga.minimize(
                         fun=self.objective, x0=x0, method=self.optimizer, **kw)
