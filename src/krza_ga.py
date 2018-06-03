@@ -4,10 +4,11 @@ import modestga as mg
 
 
 
-def minimize(fun, x0=None, bounds=None, args=(), tol=None, options={},
-             callback=None):
+def minimize(fun, x0=None, bounds=None, args=(), tol=None, method='GA',
+             options={}, callback=None):
     """
-    Minimize `fun` using Genetic Algorithm.
+    Minimize `fun` using Genetic Algorithm. Other methods might be added
+    in the future.
 
     If `x0` is given, the initial population will contain one individual
     based on `x0`. Otherwise, all individuals will be random.
@@ -39,10 +40,14 @@ def minimize(fun, x0=None, bounds=None, args=(), tol=None, options={},
     :param bounds: tuple, parameter bounds
     :param args: tuple, positional arguments to be passed to `fun`
     :param tol: float, solution tolerance (passed to `options`)
+    :param method: str, optimization method (currently only 'GA')
     :param options: dict, GA options
     :param callback: function, called after every generation
     :return: OptRes, optimization result
     """
+    # Supported optimization method
+    sup_met = ['GA']
+
     # Parameter bounds (min and max values for each)
     # Assume min = 0, max = 1 if bounds is None
     if bounds is None:
@@ -53,10 +58,16 @@ def minimize(fun, x0=None, bounds=None, args=(), tol=None, options={},
         options['tol'] = tol
 
     # Minimize
-    resmg = mg.minimize(
-        fun=fun, x0=x0, bounds=bounds, args=args, callback=callback,
-        options=options
-    )
+    if method == 'GA':
+        resmg = mg.minimize(
+            fun=fun, x0=x0, bounds=bounds, args=args, callback=callback,
+            options=options
+        )
+    else:
+        raise Warning(
+            "Unknown method '{}'. Supported methods: {}" \
+            .format(method, sup_met)
+        )
 
     # Put results into a scipy-compatible object
     class OptimizeResult:
@@ -134,7 +145,7 @@ if __name__ == "__main__":
 
     res = minimize(
         fun=fun, x0=None, bounds=bounds, args=args, tol=tol,
-        callback=callback, options=options
+        callback=callback, method='GA', options=options
     )
 
     # Print optimization result
