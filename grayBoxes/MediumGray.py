@@ -31,11 +31,11 @@ class MediumGray(md.Model):
 
     It is assumed that self.xTun, ..., self.yMod are imported from a DataFrame
 
-    The model variant is a string starting ending with a dash followed by a
-    postfix, e.g '-local1':
-        - local  calibration if self.algorithm contains substring '-l')
+    The identifier of the training method is a string starting ending with a
+    dash followed by a postfix, e.g '-local1':
+        - local  calibration if self.method contains substring '-l')
         - global calibration otherwise
-    If the last character is a number identifying the algorithm
+    If the last character is a number identifying the training method
 
     Note:
         Degree of model blackness: $0 \le \beta_{blk} \le 1$
@@ -47,12 +47,12 @@ class MediumGray(md.Model):
             f (method or function):
                 theoretical submodel f(self, x) or f(x) for single data point
 
-            identifier (string, optional):
+            identifier (str, optional):
                 object identifier
         """
         super().__init__(identifier=identifier, f=f)
 
-        self.algorithm = '-l1'
+        self.method = '-l1'
 
         # submodel
         self._black = Neural()
@@ -85,16 +85,16 @@ class MediumGray(md.Model):
             df (DataFrame):
                 data frame with model input/output and process input/output
 
-            xModKeys (1D array_like of string):
+            xModKeys (1D array_like of str):
                 list of model input keys
 
-            xPrcKeys (1D array_like of string):
+            xPrcKeys (1D array_like of str):
                 list of process input keys
 
-            yModKeys (1D array_like of string):
+            yModKeys (1D array_like of str):
                 list of model output keys
 
-            yPrcKeys (1D array_like of string):
+            yPrcKeys (1D array_like of str):
                 list of process output keys
         """
         self.xModKeys = list(xModKeys) if xModKeys else None
@@ -163,8 +163,8 @@ class MediumGray(md.Model):
             kwargs (dict, optional):
                 keyword arguments:
 
-                algo (string):
-                    identifier of algorithm ('-loc'/'-glob' and '1'/'2')
+                method (str):
+                    training method ('-loc'/'-glob' and '1'/'2')
 
                 ... network options
 
@@ -185,41 +185,41 @@ class MediumGray(md.Model):
 
                 # expanded form:
                 mod = MediumGray(f=f)
-                mod.train(X, Y, algo='-loc1', neurons=[])
+                mod.train(X, Y, method='-loc1', neurons=[])
                 y = mod.predict(x)
 
                 # compact form:
-                y = MediumGray(f=f)(X=X, Y=Y, x=x, algo='-loc1', neurons=[])
+                y = MediumGray(f=f)(X=X, Y=Y, x=x, method='-loc1', neurons=[])
         """
         self.X = X if X is not None else self.xPrc
         self.Y = Y if Y is not None else self.yPrc
 
         opt = self.kwargsDel(kwargs, ['X', 'Y'])
-        self.algorithm = kwargs.get('algo', '-loc1')
+        self.method = kwargs.get('method', '-loc1')
 
-        if '-l' in self.algorithm:
-            if self.algorithm.endswith('1'):
+        if '-l' in self.method:
+            if self.method.endswith('1'):
                 self.write("+++ Trains medium gray with '-loc1'")
 
                 self.trainLocal(self.X, self.Y, f=self.f, **opt)
                 self.ready = True
             else:
-                assert 0, str(self.algorithm)
+                assert 0, str(self.method)
         else:
             self._black.f = self.f
 
-            if self.algorithm.endswith('1'):
+            if self.method.endswith('1'):
                 self.write("+++ Trains medium gray with '-glob1'")
 
-                self._black.train(self.X, self.Y, trainers='genetic', **opt)
+                self._black.train(self.X, self.Y, method='genetic', **opt)
                 self.ready = True
-            elif self.algorithm.endswith('2'):
+            elif self.method.endswith('2'):
                 self.write("+++ Trains medium gray with '-glob2'")
 
-                self._black.train(self.X, self.Y, trainers='derivative', **opt)
+                self._black.train(self.X, self.Y, method='derivative', **opt)
                 self.ready = True
             else:
-                assert 0, str(self.algorithm)
+                assert 0, str(self.method)
 
         self.best = self.error(self.X, self.Y, **opt)
         return self.best
@@ -244,7 +244,7 @@ class MediumGray(md.Model):
 
         self.x = x
 
-        if '-l' in self.algorithm:
+        if '-l' in self.method:
             xTun = self._black.predict(x=self.x, **kw)
             xMod = np.c_[self.xCom, xTun]
             self.y = md.predict(self, x=xMod, **kw)
@@ -314,7 +314,7 @@ if __name__ == '__main__':
 
         model.setArrays(df, xModKeys=['x0', 'x2', 'x3'], xPrcKeys=['x0', 'x4'],
                         yModKeys=['y0'], yPrcKeys=['y0'])
-        model(X=None, Y=None, silent=True, neurons=[], algo='-l1')
+        model(X=None, Y=None, silent=True, neurons=[], method='-l1')
         y = model(x=model.X)
         print('*'*20)
         print('*** x:', model.x, 'y:', y)

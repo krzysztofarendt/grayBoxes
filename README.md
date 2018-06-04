@@ -6,32 +6,28 @@ A remedy is the combination of theoretical with empirical models. Such hybrid mo
 
 _grayBoxes_ contributes to the creation and evaluation of hybrid models. A Python framework for implementation of empirical, theoretical and hybrid models is provided. The generic model access and the possibility to distribute models over subdomains supports long-distance collaboration.
 
+[[Link to grayBoxes Wiki]](https://github.com/dwweiss/grayBoxes/wiki)
 
+<br>
 
-## Table of Contents 
+### Content of project 
 
-    src 
-        Training, sensitivity analysis and execution of white box, gray box and black box models
+    grayBoxes
+        Training, sensitivity analysis and prediction with white box, gray box and black box models
 
-    src/tests
+    tests
         Selected test cases
 
     doc
         Figures and manuals used in wiki
         
 
-## Installation
+### Installation
 
-    $ wget https://github.com/dwweiss/grayBoxes.git
-or
+    git clone https://github.com/dwweiss/grayBoxes.git
+    sudo python3 setup.py install `
 
-    $ git clone https://github.com/dwweiss/grayBoxes.git
+### Dependencies
 
-
-## Dependency
-
-Neural.py is dependent on `neurolab`, install with `sudo pip3 install neurolab` or:
-
-    1) Download neurolab.0.x.y.tar.gz from: https://pypi.python.org/pypi/neurolab
-    2) Change to download directory                            
-    3) python -m pip install ./neurolab.0.x.y.tar.gz
+- Modules _LightGray.py_ and _Minimum.py_ are dependent on package _modestga_ [[MGA18]](https://github.com/dwweiss/grayBoxes/wiki/References#mga18)
+- Module _Neural.py_ is dependent on package _neurolab_ [[NLB15]](https://github.com/dwweiss/grayBoxes/wiki/References#nlb15)

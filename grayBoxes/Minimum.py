@@ -17,7 +17,10 @@
   02110-1301 USA, or see the FSF site: http://www.fsf.org.
 
   Version:
-      2018-05-23 DWW
+      2018-06-03 DWW
+
+  Acknowledgemdent:
+      Module modestga is a contribution by Krzyzstof Arendt
 """
 
 import sys
@@ -30,13 +33,10 @@ from mpl_toolkits.mplot3d import Axes3D          # needed for "projection='3d'"
 
 from Base import Base
 from Forward import Forward
-#############################################
 try:
-    import krza_ga
+    import modestga as mg
 except ImportError:
-    print('??? module krza_ga not imported')
-HAS_KRZA_GA = 'krza_ga' in sys.modules
-#############################################
+    print('??? module modestga not imported')
 
 
 class Minimum(Forward):
@@ -58,7 +58,6 @@ class Minimum(Forward):
 
     Note:
         - for single target (Inverse: norm(y - Y), Optimum: one of y)
-        - penalty solution does not work yet
     """
 
     def __init__(self, model, identifier='Minimum'):
@@ -67,7 +66,7 @@ class Minimum(Forward):
             model (Model_like):
                 box type model object
 
-            identifier (string, optional):
+            identifier (str, optional):
                 object identifier
         """
         super().__init__(identifier=identifier, model=model)
@@ -78,56 +77,25 @@ class Minimum(Forward):
         self._history = None       # history[iTrial][jStep] = (x, y, objective)
         self._trialHistory = None     # trialHistory[jStep] = (x, y, objective)
 
-        # the 3 leading char of optimizer are significant, but case-insensitive
-        self._validOptimizers = ['Nelder-Mead',
-                                 'Powell',
-                                 'CG',
-                                 'BFGS',
-                                 # 'Newton-CG',             # requires Jacobian
-                                 'L-BFGS-B',
-                                 'TNC',
-                                 'COBYLA',
-                                 'SLSQP',
-                                 # 'dogleg',                # requires Jacobian
-                                 # 'trust-ncg',             # requires Jacobian
-                                 'basinhopping',               # GLOBAL optimum
-                                 'differential_evolution',     # GLOBAL optimum
-                                 ]
-#############################################
-        if HAS_KRZA_GA:
-            self._validOptimizers += ['krza_ga']      # Krzystof's GA optimizer
-#############################################
-        self._optimizer = self._validOptimizers[0]
+        # three leading chars are significant, case-insensitive
+        self._validMethods = ['Nelder-Mead',
+                              'Powell',
+                              'CG',
+                              'BFGS',
+                              # 'Newton-CG',                # requires Jacobian
+                              'L-BFGS-B',
+                              'TNC',
+                              # 'COBYLA',       # failed in grayBoxes test case
+                              'SLSQP',
+                              # 'dogleg',                   # requires Jacobian
+                              # 'trust-ncg',                # requires Jacobian
+                              'basinhopping',                  # GLOBAL optimum
+                              'differential_evolution',        # GLOBAL optimum
+                              ]
+        if 'modestga' in sys.modules:
+            self._validMethods += ['ga']
 
-    @property
-    def bounds(self):
-        """
-        Gets x-bounds used in penalty() method
-
-        Returns:
-            (2D array of float):
-                aray of (min, max) pairs of float:
-                    [(x0_min, x0_max), ... ]
-        """
-        if self._bounds is None:
-            return None
-        else:
-            return np.atleast_2d(self._bounds)
-
-    @bounds.setter
-    def bounds(self, value):
-        """
-        Sets x-bounds used in penalty() method
-
-        Args:
-            (2D array_like of float):
-                array of (min, max) pairs of float:
-                    [(x0_min, x0_max), ... ]
-        """
-        if value is None:
-            self._bounds = None
-        else:
-            self._bounds = np.atleast_2d(value)
+        self._method = self._validMethods[0]
 
     @property
     def x(self):
@@ -182,67 +150,41 @@ class Minimum(Forward):
             self._y = np.atleast_1d(value)
 
     @property
-    def optimizer(self):
+    def method(self):
         """
         Returns:
-            (string):
+            (str):
                 optimization method
         """
-        return str(self._optimizer)
+        return str(self._method)
 
-    @optimizer.setter
-    def optimizer(self, value):
+    @method.setter
+    def method(self, value):
         """
         Sets optimization method(s), corrects too short strings and assigns
         default if value is unknown method
 
         Args:
-            value (string):
+            value (str):
                 optimization method
         """
         if value is None:
-            value = self._validOptimizers[0]
+            value = self._validMethods[0]
         value = str(value)
         if len(value) == 1:
             self.write("??? optimiz. method too short (min 3 char): '", value,
-                       "', continue with: '", self._validOptimizers[0], "'")
-            self._optimizer = self._validOptimizers[0]
+                       "', continue with: '", self._validMethods[0], "'")
+            self._method = self._validMethods[0]
 
         valids = [x.lower().startswith(value[:3].lower())
-                  for x in self._validOptimizers]
+                  for x in self._validMethods]
         if not any(valids):
             self.write("??? Unknown optimization method: '", value,
-                       "', continue with: '", self._validOptimizers[0], "'")
-            self._optimizer = self._validOptimizers[0]
+                       "', continue with: '", self._validMethods[0],
+                       "', validMethods: '", self._validMethods, "'")
+            self._method = self._validMethods[0]
         else:
-            self._optimizer = self._validOptimizers[valids.index(True)]
-
-    def penalty(self, x):
-        """
-        Penalty to be added to objective function if x is out of self.bounds
-
-        Args:
-            x (1D array_like of float):
-                input of single data point, shape: (nInp)
-
-        Returns:
-            (float):
-                penalty to objective function
-        """
-        assert self.bounds is None, 'penalty() is not tested'
-
-        penaltyValue = 1e10
-        if self.bounds is not None:
-            for limit, _x in zip(self.bounds, x):
-                if limit[0] is not None and limit[0] > _x:
-                    self.write('+++ penalty limit[0]:', limit[0], ' > x:', _x,
-                               'penalty:', penaltyValue)
-                    return penaltyValue
-                if limit[1] is not None and _x > limit[1]:
-                    self.write('+++ penalty limit[1]:', limit[1], ' < x:', _x,
-                               'penalty:', penaltyValue)
-                    return penaltyValue
-        return 0.0
+            self._method = self._validMethods[valids.index(True)]
 
     def objective(self, x, **kwargs):
         """
@@ -270,7 +212,7 @@ class Minimum(Forward):
 
         self._trialHistory.append([x, out, obj])
 
-        return obj + self.penalty(x)
+        return obj
 
     def task(self, **kwargs):
         """
@@ -281,7 +223,7 @@ class Minimum(Forward):
                 bounds (2D array_like of float):
                     array of min/max pairs for optimization constraints etc
 
-                optimizer (string):
+                method (str):
                     optimization method
 
                 y (1D array_like of float):
@@ -299,13 +241,11 @@ class Minimum(Forward):
         Base.task(self, **kwargs)
 
         bounds = kwargs.get('bounds', None)
-        if bounds is not None:
-            self.bounds = bounds
 
-        optimizer = kwargs.get('optimizer', None)
-        if optimizer is not None:
-            self.optimizer = optimizer
-        self.write('+++ optimizer:', self.optimizer)
+        method = self.kwargsGet(kwargs, ('method', 'methods'), None)
+        if method is not None:
+            self.method = method
+        self.write('+++ method: ', self.method)
 
         # sets target for Inverse
         if type(self).__name__ in ('Inverse'):
@@ -319,7 +259,7 @@ class Minimum(Forward):
         for x0 in xIni:
             self._trialHistory = []
 
-            if self.optimizer.startswith('bas'):
+            if self.method.startswith('bas'):
                 res = scipy.optimize.basinhopping(
                     func=self.objective, x0=x0, niter=100, T=1.0, stepsize=0.5,
                     minimizer_kwargs=None, take_step=None, accept_test=None,
@@ -328,11 +268,9 @@ class Minimum(Forward):
                 y = np.atleast_1d(res.fun)
                 success = 'success' in res.message[0]
 
-            elif self.optimizer.startswith('dif'):
-                if self.bounds is not None:
-                    bounds = self.bounds
-                else:
-                    bounds = [[-10, 10] for _x in x0]
+            elif self.method.startswith('dif'):
+                if bounds is None:
+                    bounds = [(-10, 10)] * len(x0)
                 res = scipy.optimize.differential_evolution(
                     func=self.objective, bounds=bounds, strategy='best1bin',
                     maxiter=None, popsize=15, tol=0.01, mutation=(0.5, 1),
@@ -341,24 +279,17 @@ class Minimum(Forward):
                 x, y = res.x, res.fun
                 success = res.success
 
-            elif self.optimizer.startswith('krz'):
-                #############################################
-                if HAS_KRZA_GA:
-                    validKeys = ['bounds', 'tol', 'args', 'options']  # see scipy's minimize
-                    kw = {k: kwargs[k] for k in validKeys if k in kwargs}
-                    res = krza_ga.minimize(
-                        fun=self.objective, x0=x0, method=self.optimizer, **kw)
-                    x = np.atleast_1d(res.x)
-                    kw = self.kwargsDel(kwargs, 'x')
-                    y = self.model.predict(x=res.x, **kw)[0]
-                    success = res.success
-                else:
-                    success = False
-                #############################################
-
+            elif self.method == 'ga':
+                validKeys = ['tol', 'options', 'bounds']
+                kw = {k: kwargs[k] for k in validKeys if k in kwargs}
+                res = mg.minimize(fun=self.objective, x0=x0,
+                                  # method=self.method, # TODO .
+                                  **kw)
+                x, y = np.atleast_1d(res.x), np.atleast_1d(res.fx)
+                success = True  # TODO .
             else:
-                res = scipy.optimize.minimize(
-                    fun=self.objective, x0=x0, method=self.optimizer,)
+                res = scipy.optimize.minimize(fun=self.objective, x0=x0,
+                                              method=self.method,)
                 x = np.atleast_1d(res.x)
                 kw = self.kwargsDel(kwargs, 'x')
                 y = self.model.predict(x=res.x, **kw)[0]
@@ -595,7 +526,7 @@ if __name__ == '__main__':
         print('-' * len(s) + '\n' + s + '\n' + '-' * len(s))
 
         op = Minimum(White('demo'))
-        x, y = op(x=rand(10, [-5, 5], [-7, 7]), optimizer='nelder-mead',
+        x, y = op(x=rand(10, [-5, 5], [-7, 7]), method='nelder-mead',
                   silent=True)
         # op.plot()
         print('x:', x, 'y:', y, '\nop.x:', op.x, 'op.y:', op.y)
@@ -605,7 +536,7 @@ if __name__ == '__main__':
         print('-' * len(s) + '\n' + s + '\n' + '-' * len(s))
 
         op = Minimum(White(f))
-        x, y = op(x=rand(10, [-5, 5], [-7, 7]), optimizer='nelder-mead',
+        x, y = op(x=rand(10, [-5, 5], [-7, 7]), method='nelder-mead',
                   silent=True)
         # op.plot()
         print('x:', x, 'y:', y, '\nop.x:', op.x, 'op.y:', op.y)
@@ -631,11 +562,19 @@ if __name__ == '__main__':
         if True:
             op = Minimum(White('demo'))
 
-            for optimizer in op._validOptimizers:
-                print('\n'+'-'*60+'\n' + optimizer+'\n' + '-'*60+'\n')
+            methods = ['ga', 'BFGS']
+            methods = op._validMethods
 
-                x = rand(5, [0, 2], [0, 2])
-                x, y = op(x=x, optimizer=optimizer, silent=True)
+            for method in methods:
+                print('\n'+'-'*60+'\n' + method + '\n' + '-'*60+'\n')
 
-                op.plot('traj')
+                x = rand(3, [0, 2], [0, 2])
+                if method == 'ga':
+                    x, y = op(x=x, method=method, bounds=2*[(0, 2)],
+                              generations=5000)
+                else:
+                    x, y = op(x=x, method=method, silent=True)
+
+                if 0:
+                    op.plot('traj')
                 print('x:', x, 'y:', y)

@@ -17,7 +17,7 @@
   02110-1301 USA, or see the FSF site: http://www.fsf.org.
 
   Version:
-      2018-05-29 DWW
+      2018-06-03 DWW
 """
 
 import math
@@ -70,14 +70,14 @@ if __name__ == '__main__':
 
     # model selection
     models = [
-              White(f),
+              # White(f),
               LightGray(f),
               # MediumGray(f),
-              DarkGray(f),
-              Black()
+              # DarkGray(f),
+              # Black()
               ]
     for model in models:
-        model.silent = True
+        model.silent = not True
     figsize = (4, 3)                                    # excluding plotSurface
 
     # min and max number of hidden neurons for medium dark and black box models
@@ -134,8 +134,8 @@ if __name__ == '__main__':
         elif isinstance(model, (LightGray)):
             model._weights = None
             y = model(X=X, Y=Y, x=x, C0=md.rand(trialsLgr, *(4*[[0, 2]])),
-                      trainers=['BFGS', 'differential_evolution'],
-                      detailed=True)
+                      methods=['BFGS', 'ga'],
+                      detailed=True, bounds=4*[(0, 2)])
             res = {'x': x, 'y': y, 'X': X, 'dY': model(x=X) - Y, 'neurons': 0}
         else:
             model.silent = True

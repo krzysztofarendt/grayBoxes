@@ -17,20 +17,20 @@
   02110-1301 USA, or see the FSF site: http://www.fsf.org.
 
   Version:
-      2018-05-25 DWW
+      2018-06-03 DWW
+
+  Acknowledgemdent:
+      Module modestga is a contribution by Krzyzstof Arendt
 """
 
 import sys
 import numpy as np
 import scipy.optimize
 from Model import Model
-#############################################
 try:
-    import krza_ga
+    import modestga as mg
 except ImportError:
-    print('??? module krza_ga not imported')
-HAS_KRZA_GA = 'krza_ga' in sys.modules
-#############################################
+    print('??? Module modestga not imported')
 
 
 class LightGray(Model):
@@ -64,7 +64,7 @@ class LightGray(Model):
             return [c0 + c1 * (c2 * np.sin(x[0]) + c3 * (x[1] - 1)**2)]
 
         ### compact form:
-        y = LightGray(function)(X=X, Y=Y, x=x, C0=4, trainers='lm')
+        y = LightGray(function)(X=X, Y=Y, x=x, C0=4, methods='lm')
 
         ### expanded form:
         # assign theoretical submodel as function or method ('self'-attribute)
@@ -97,14 +97,14 @@ class LightGray(Model):
             f (method or function):
                 theoretical submodel f(self, x) or f(x) for single data point
 
-            identifier (string, optional):
+            identifier (str, optional):
                 object identifier
         """
         super().__init__(identifier=identifier, f=f)
 
         self._nMaxOut = 1        # max nOut is '1' due to implementation limits
 
-        # populate 'validTrainers' list
+        # populate 'validmethods' list
         self.scipyMinimizers = ['BFGS',
                                 'L-BFGS-B',             # BFGS with less memory
                                 'Nelder-Mead',          # gradient-free simplex
@@ -112,28 +112,24 @@ class LightGray(Model):
                                 'CG',
                                 # 'Newton-CG',              # requires Jacobian
                                 'TNC',
-                                'COBYLA',
+                                # 'COBYLA',     # failed in grayBoxes test case
                                 'SLSQP',
                                 # 'dogleg',                 # requires Jacobian
                                 # 'trust-ncg',              # requires Jacobian
                                 'basinhopping',        # global (brute) optimum
-                                'differential_evolution',      # GLOBAL optimum
+                                'differential_evolution',      # global optimum
                                 ]
         self.scipyRootFinders = ['lm',
                                  # 'hybr', 'broyden1', 'broyden2', 'anderson',
                                  # 'linearmixing', 'diagbroyden',
                                  # 'excitingmixing', 'krylov', 'df-sane'
                                  ]
-        self.scipyEquationMinimizers = ['least_squares',      # Levenberg-Marq.
+        self.scipyEquationMinimizers = ['least_squares',  # Levenberg-Marquardt
                                         'leastsq',
                                         ]
-        #############################################
-        if HAS_KRZA_GA:
-            self.geneticMinimizers = ['krza_ga']      # Krzystof's GA optimizer
-        else:
-            self.geneticMinimizers = []
-        #############################################
-        self.validTrainers = self.scipyMinimizers + self.scipyRootFinders + \
+        self.geneticMinimizers = ['ga'] if 'modestga' in sys.modules else []
+
+        self.validMethods = self.scipyMinimizers + self.scipyRootFinders + \
             self.scipyEquationMinimizers + self.geneticMinimizers
 
     # function wrapper for scipy minimize
@@ -148,15 +144,15 @@ class LightGray(Model):
                               **self.kwargsDel(kwargs, 'x')) -
                 self.Y).ravel()
 
-    def minimizeLeastSquares(self, trainer, c0, **kwargs):
+    def minimizeLeastSquares(self, method, c0, **kwargs):
         """
         Minimizes least squares: sum(self.f(self.X)-self.Y)^2)/X.size
             for SINGLE initial fit param set
         Updates self.ready and self.weights according to success of optimizer
 
         Args:
-            trainer (str):
-                type of optimizer for minimizing objective function
+            method (str):
+                optimizing method for minimizing objective function
                 [recommendation: 'BFGS' or 'L-BFGS-B' if ill-conditioned
                                  'Nelder-Mead' or 'Powell' if noisy data]
 
@@ -176,12 +172,12 @@ class LightGray(Model):
                 results, see Model.train()
 
         """
-        results = self.initResults('trainer', trainer)
+        results = self.initResults('method', method)
         self.weights = None                       # required by Model.predict()
         self.ready = True                         # required by Model.predict()
 
-        if trainer in self.scipyMinimizers:
-            if trainer.startswith('bas'):
+        if method in self.scipyMinimizers:
+            if method.startswith('bas'):
                 nItMax = kwargs.get('nItMax', 100)
 
                 res = scipy.optimize.basinhopping(
@@ -195,9 +191,9 @@ class LightGray(Model):
                     results['iterations'] = res.nit
                     results['evaluations'] = res.nfev
                 else:
-                    self.write('\n??? ', trainer, ': ', res.message)
+                    self.write('\n??? ', method, ': ', res.message)
 
-            elif trainer.startswith('dif'):
+            elif method.startswith('dif'):
                 nItMax = kwargs.get('nItMax', None)
 
                 res = scipy.optimize.differential_evolution(
@@ -211,33 +207,33 @@ class LightGray(Model):
                     results['iterations'] = res.nit
                     results['evaluations'] = res.nfev
                 else:
-                    self.write('\n??? ', trainer, ': ', res.message)
+                    self.write('\n??? ', method, ': ', res.message)
             else:
                 validKeys = ['nItMax', 'adaptive', 'goal']
                 kw = {}
                 if any(k in kwargs for k in validKeys):
                     kw['options'] = {}
                     kw['options']['maxiter'] = kwargs.get('nItMax', None)
-                    if trainer == 'Nelder-Mead':
+                    if method == 'Nelder-Mead':
                         kw['options']['xatol'] = kwargs.get('goal', 1e-4)
                 try:
                     res = scipy.optimize.minimize(
-                        fun=self.meanSquareErrror, x0=c0, method=trainer, **kw)
+                        fun=self.meanSquareErrror, x0=c0, method=method, **kw)
                     if res.success:
                         results['weights'] = np.atleast_1d(res.x)
                         results['iterations'] = res.nit \
-                            if trainer != 'COBYLA' else -1
+                            if method != 'COBYLA' else -1
                         results['evaluations'] = res.nfev
                     else:
-                        self.write('\n??? ', trainer, ': ', res.message)
+                        self.write('\n??? ', method, ': ', res.message)
                 except scipy.optimize.OptimizeWarning:
                     results['weights'] = None
-                    self.write('\n??? ', trainer, ': ', res.message)
+                    self.write('\n??? ', method, ': ', res.message)
 
-        elif trainer in self.scipyRootFinders:
+        elif method in self.scipyRootFinders:
             nItMax = kwargs.get('nItMax', 0)
 
-            if trainer.startswith('lm'):
+            if method.startswith('lm'):
                 res = scipy.optimize.root(
                     fun=self.difference, x0=c0, args=(), method='lm', jac=None,
                     tol=None, callback=None,
@@ -251,12 +247,12 @@ class LightGray(Model):
                     results['iterations'] = -1
                     results['evaluations'] = res.nfev
                 else:
-                    self.write('\n??? ', trainer, ': ', res.message)
+                    self.write('\n??? ', method, ': ', res.message)
             else:
-                print("\n??? trainer:'" + str(trainer) + "' not implemented")
+                print("\n??? method:'" + str(method) + "' not implemented")
 
-        elif trainer in self.scipyEquationMinimizers:
-            if trainer.startswith('leastsq'):
+        elif method in self.scipyEquationMinimizers:
+            if method.startswith('leastsq'):
                 x, cov_x, infodict, mesg, ier = scipy.optimize.leastsq(
                     self.difference, c0, full_output=True)
                 if ier in [1, 2, 3, 4]:
@@ -264,33 +260,35 @@ class LightGray(Model):
                     results['iterations'] = -1
                     results['evaluations'] = infodict['nfev']
                 else:
-                    self.write('\n??? ', trainer, ': ', mesg)
+                    self.write('\n??? ', method, ': ', mesg)
 
-            elif trainer == 'least_squares':
+            elif method == 'least_squares':
                 res = scipy.optimize.least_squares(self.difference, c0)
                 if res.success:
                     results['weights'] = np.atleast_1d(res.x)
                     results['iterations'] = -1
                     results['evaluations'] = res.nfev
                 else:
-                    self.write('\n??? ', trainer, ': ', res.message)
+                    self.write('\n??? ', method, ': ', res.message)
 
-        elif trainer in self.geneticMinimizers:
-            if HAS_KRZA_GA and trainer == 'krza_ga':
-                #############################################
-                validKeys = ['tol', 'options']  # see scipy's minimize
+        elif method in self.geneticMinimizers:
+            if 'modestga' in sys.modules and method == 'ga':
+                assert method != 'ga' or 'modestga' in sys.modules
+
+                validKeys = ['tol', 'options', 'bounds']
+                # see scipy's minimize
                 kw = {k: kwargs[k] for k in validKeys if k in kwargs}
-                res = krza_ga.minimize(
-                    fun=self.meanSquareErrror, x0=c0, method=trainer, **kw)
-                #############################################
-                if res.success:
+                res = mg.minimize(fun=self.meanSquareErrror, x0=c0,
+                                  # TODO method=method,
+                                  **kw)
+                if True:  # TODO res.success:
                     results['weights'] = np.atleast_1d(res.x)
                     results['iterations'] = -1  # res.nit
-                    results['evaluations'] = res.nfev
+                    results['evaluations'] = res.ng  # TODO res.nfev =? ng
                 else:
-                    self.write('\n??? ', trainer, ': ', res.message)
+                    self.write('\n??? ', method, ': ', res.message)
         else:
-            assert 0, '??? LightGray, invalid trainer: ' + str(trainer)
+            assert 0, '??? LightGray, invalid method: ' + str(method)
 
         self.weights = results['weights']
         self.ready = self.weights is not None
@@ -319,11 +317,11 @@ class LightGray(Model):
             kwargs (dict, optional):
                 keyword arguments:
 
-                trainers (string or 1D array_like of string):
+                methods (str or 1D array_like of str):
                     optimizer method of
                     - scipy.optimizer.minimize or
                     - genetic algorithm
-                    see: self.validTrainers
+                    see: self.validMethods
                     default: 'BFGS'
 
                 bounds (2-tuple of float or 2-tuple of 1D array_like of float):
@@ -348,34 +346,31 @@ class LightGray(Model):
             C0 = np.ones(C0)
         C0 = np.atleast_2d(C0)                          # shape: (nTrial, nTun)
 
-        # get trainers from kwargs
-        trainers = self.kwargsGet(kwargs, ('trainers', 'trainer', 'train'))
-        if trainers is None:
-            trainers = self.validTrainers[0]
-        trainers = np.atleast_1d(trainers)
-        if trainers[0].lower() == 'all':
-            trainers = self.validTrainers
-        elif trainers[0].lower() == 'root':
-            trainers = self.scipyRootFinders
-        if trainers[0].lower() == 'least':
-            trainers = self.scipyEquationMinimizers
-        if trainers[0].lower() == 'minimize':
-            trainers = self.scipyMinimizers
-        if any([tr not in self.validTrainers for tr in trainers]):
-            trainers = self.validTrainers[0]
-            self.write("??? correct trainers: '", trainers, "' ==> ", trainers)
-        trainers = np.atleast_1d(trainers)
+        # get methods from kwargs
+        methods = self.kwargsGet(kwargs, ('methods', 'method'))
+        if methods is None:
+            methods = self.validMethods[0]
+        methods = np.atleast_1d(methods)
+        if methods[0].lower() == 'all':
+            methods = self.validMethods
+        if any([tr not in self.validMethods for tr in methods]):
+            methods = self.validMethods[0]
+            self.write("??? correct method: '", methods, "' ==> ", methods)
+        methods = np.atleast_1d(methods)
 
         # set detailed print (only if not silent)
         printDetails = kwargs.get('detailed', False)
 
-        # loops over all trainers
+        # loops over all methods
         self.write('    fit (', None)
         self.best = self.initResults()
-        for trainer in trainers:
-            self.write(trainer, ', ' if trainer != trainers[-1] else '', None)
+        for method in methods:
+            self.write(method, ', ' if method != methods[-1] else '', None)
 
-            # tries all initial fit parameter sets
+            # tries all initial fit parameter sets if not global method
+            if method in ('basinhopping', 'differential_evolution', 'ga'):
+                C0 = [C0[0]]
+
             for iTrial, c0 in enumerate(C0):
                 if printDetails:
                     if iTrial == 0:
@@ -383,7 +378,7 @@ class LightGray(Model):
                     self.write('        C0: ', str(np.round(c0, 2)), None)
 
                 results = self.minimizeLeastSquares(
-                    trainer, c0, **self.kwargsDel(kwargs, ('trainer', 'c0')))
+                    method, c0, **self.kwargsDel(kwargs, ('method', 'c0')))
 
                 if results['weights'] is not None:
                     self.weights = results['weights']     # for Model.predict()
@@ -405,7 +400,7 @@ class LightGray(Model):
 
         self.write('), w: ', None)
         self.write(str(np.round(self.weights, 4)))
-        self.write('    best trainer: ', "'", self.best['trainer'], "'", None)
+        self.write('    best method: ', "'", self.best['method'], "'", None)
         self.write(', ', None)
         for key in ['L2', 'abs']:
             if key in self.best:
@@ -483,19 +478,22 @@ if __name__ == '__main__':
         print('-' * len(s) + '\n' + s + '\n' + '-' * len(s))
 
         # train with 9 random initial tuning parameter sets, each of size 4
-        C0 = md.rand(9, *(4 * [[0, 2]]))
         model = LightGray(f)
+        C0 = md.rand(9, *(4 * [[0, 2]]))
 
-#############################################
-        if HAS_KRZA_GA:
-            trainer = 'krza_ga'
-        else:
-            # trainer = ['all']
-            trainer = ['L-BFGS-B', 'BFGS', 'Powell',
-                       'Nelder-Mead', 'differential_evolution']
-        y = model(X=X, Y=Y, C0=C0, x=X, trainer=trainer, detailed=True,
-                  nItMax=5000)
-#############################################
+        methods = [
+                    # 'all',
+                    # 'L-BFGS-B',
+                    # 'BFGS',
+                    'Powell',
+                    # 'Nelder-Mead',
+                    # 'differential_evolution',
+                    # 'basinhopping',
+                    'ga',
+                    ]
+
+        y = model(X=X, Y=Y, C0=C0, x=X, methods=methods, detailed=True,
+                  nItMax=5000, bounds=4*[(0, 2)])
 
         plot_X_Y_Yref(X, y, y_exa, ['X', 'y', 'y_{exa}'])
         if 0:
@@ -512,4 +510,4 @@ if __name__ == '__main__':
             return [y0]
 
         # train with single initial tuning parameter set, nTun from f2(None)
-        y = LightGray(f2)(X=X, Y=Y, x=X, silent=not True, trainer='all')
+        y = LightGray(f2)(X=X, Y=Y, x=X, silent=not True, method='all')
