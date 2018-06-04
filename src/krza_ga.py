@@ -79,11 +79,12 @@ def minimize(fun, x0=None, bounds=None, args=(), tol=None, method='GA',
         - success is always True (because how to define it in GA?)
         - `fun` is named `fx` in `modestga`
         """
-        def __init__(self, x, fun, success, message):
+        def __init__(self, x, fun, success, message, nfev):
             self.x = x
             self.fun = fun
             self.success = success
             self.message = message
+            self.nfev = nfev
 
         def __str__(self):
             s = "Optimization result:\n"
@@ -92,10 +93,12 @@ def minimize(fun, x0=None, bounds=None, args=(), tol=None, method='GA',
             s += "success = {}\n".format(self.success)
             s += "message = {}\n".format(self.message)
             s += "fun = {}\n".format(self.fun)
+            s += "nfev = {}\n".format(self.nfev)
             return s
 
     res = OptimizeResult(
-        x=resmg.x, fun=resmg.fx, success=True, message=resmg.message
+        x=resmg.x, fun=resmg.fx, success=True, message=resmg.message,
+        nfev=resmg.nfev
     )
 
     return res
